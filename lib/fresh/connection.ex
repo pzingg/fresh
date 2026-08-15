@@ -131,12 +131,13 @@ defmodule Fresh.Connection do
   def connected(:info, message, %__MODULE__{} = data) do
     case Mint.WebSocket.stream(data.connection, message) do
       {:ok, conn, responses} ->
-        # reply will be sent in
+        # Waiting reply will be sent in handle_response
         responses
         |> Enum.reduce(%{data | connection: conn}, &handle_response/2)
         |> data_to_event()
 
       {:error, conn, reason, _responses} ->
+        # Waiting reply will be sent in handle_error
         {:streaming_failed, reason}
         |> handle_error(data, connection: conn)
         |> data_to_event()
