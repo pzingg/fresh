@@ -5,8 +5,8 @@ defmodule Fresh.TestRouter do
 
   import Plug.Conn
 
-  plug(:match)
-  plug(:dispatch)
+  plug :match
+  plug :dispatch
 
   get "/websocket" do
     conn

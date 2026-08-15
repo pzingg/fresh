@@ -2,7 +2,7 @@ defmodule Fresh.MixProject do
   use Mix.Project
 
   @description "WebSocket client for Elixir, built atop the Mint ecosystem"
-  @version "0.4.4"
+  @version "0.4.5"
 
   @source_url "https://github.com/bunopnu/fresh"
   @changelog_url "https://github.com/bunopnu/fresh/blob/main/CHANGELOG.md"
@@ -11,7 +11,7 @@ defmodule Fresh.MixProject do
     [
       app: :fresh,
       version: @version,
-      elixir: "~> 1.14",
+      elixir: "~> 1.17",
       start_permanent: Mix.env() == :prod,
       elixirc_paths: elixirc_paths(Mix.env()),
       deps: deps(),
@@ -77,7 +77,7 @@ defmodule Fresh.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
 
       # Only Testing
-      {:plug, "~> 1.15", only: :test},
+      {:plug, "~> 1.15", only: [:dev, :test]},
       {:bandit, "~> 1.4", only: :test},
       {:websock_adapter, "~> 0.5.4", only: :test},
       {:excoveralls, "~> 0.18.1", only: :test}

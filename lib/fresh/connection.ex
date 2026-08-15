@@ -11,6 +11,7 @@ defmodule Fresh.Connection do
     :module,
     :default_state,
     :inner_state,
+    :waiting,
     :uri,
     :opts,
     :connection,
@@ -90,16 +91,22 @@ defmodule Fresh.Connection do
 
     upgrade_opts = Option.mint_upgrade_opts(data.opts)
 
-    with {:ok, conn} <- Mint.HTTP.connect(http_scheme, uri.host, uri.port, connect_opts),
+    with {:ok, headers, inner_state} <- data.module.handle_preconnect(headers, data.inner_state),
+         {:ok, conn} <- Mint.HTTP.connect(http_scheme, uri.host, uri.port, connect_opts),
          {:ok, conn, ref} <- Mint.WebSocket.upgrade(ws_scheme, conn, path, headers, upgrade_opts) do
-      {:next_state, :connected, %__MODULE__{data | connection: conn, request_ref: ref}}
+      {:next_state, :connected,
+       %__MODULE__{data | connection: conn, request_ref: ref, inner_state: inner_state}}
     else
       {:error, reason} ->
+        data = reply_to_waiting(data, {:error, :connecting_failed})
+
         {:connecting_failed, reason}
         |> handle_error(data)
         |> data_to_event()
 
       {:error, conn, reason} ->
+        data = reply_to_waiting(data, {:error, :upgrading_failed})
+
         {:upgrading_failed, reason}
         |> handle_error(data, connection: conn)
         |> data_to_event()
@@ -115,6 +122,10 @@ defmodule Fresh.Connection do
     :keep_state_and_data
   end
 
+  def disconnected({:call, from}, :wait, data) do
+    {:keep_state, %{data | waiting: from}}
+  end
+
   def connected(:info, :ping, data) do
     {:ping, <<>>}
     |> send_frame(data)
@@ -124,16 +135,22 @@ defmodule Fresh.Connection do
   def connected(:info, message, data) do
     case Mint.WebSocket.stream(data.connection, message) do
       {:ok, conn, responses} ->
+        data = reply_to_waiting(data, :ok)
+
         responses
         |> Enum.reduce(%__MODULE__{data | connection: conn}, &handle_response/2)
         |> data_to_event()
 
       {:error, conn, reason, _responses} ->
+        data = reply_to_waiting(data, {:error, reason})
+
         {:streaming_failed, reason}
         |> handle_error(data, connection: conn)
         |> data_to_event()
 
       :unknown ->
+        data = reply_to_waiting(data, {:error, :unknown_response})
+
         message
         |> data.module.handle_info(data.inner_state)
         |> handle_generic_callback(data)
@@ -147,14 +164,35 @@ defmodule Fresh.Connection do
     |> data_to_event()
   end
 
-  def connected({:call, from}, :available, %__MODULE__{connection: connection}) do
-    :gen_statem.reply(from, Mint.HTTP.open?(connection))
+  def connected({:call, from}, :available, data) do
+    :gen_statem.reply(from, available?(data))
     :keep_state_and_data
+  end
+
+  def connected({:call, from}, :wait, data) do
+    if available?(data) do
+      :gen_statem.reply(from, :ok)
+      :keep_state_and_data
+    else
+      {:keep_state, %{data | waiting: from}}
+    end
   end
 
   @impl true
   def terminate(reason, _state, data) do
     data.module.handle_terminate(reason, data.inner_state)
+  end
+
+  # To be available, we must have a websocket and an open HTTP connection
+  defp available?(%__MODULE__{websocket: nil}), do: false
+
+  defp available?(%__MODULE__{connection: connection}), do: Mint.HTTP.open?(connection)
+
+  defp reply_to_waiting(%__MODULE__{waiting: nil} = data, _reply), do: data
+
+  defp reply_to_waiting(%__MODULE__{waiting: from} = data, reply) do
+    :gen_statem.reply(from, reply)
+    %{data | waiting: nil}
   end
 
   ### ===============================================================
