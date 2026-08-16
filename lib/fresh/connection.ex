@@ -118,7 +118,7 @@ defmodule Fresh.Connection do
     :keep_state_and_data
   end
 
-  def disconnected({:call, from}, :wait, data) do
+  def disconnected({:call, from}, :wait, %__MODULE__{} = data) do
     {:keep_state, %{data | waiting: from}}
   end
 
@@ -163,7 +163,7 @@ defmodule Fresh.Connection do
     :keep_state_and_data
   end
 
-  def connected({:call, from}, :wait, data) do
+  def connected({:call, from}, :wait, %__MODULE__{} = data) do
     if available?(data) do
       :gen_statem.reply(from, :ok)
       :keep_state_and_data
