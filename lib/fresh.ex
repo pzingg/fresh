@@ -138,24 +138,6 @@ defmodule Fresh do
           | :close
 
   @doc """
-  Callback invoked before a WebSocket connection is attempted.
-
-  ## Parameters
-
-  * `headers` - The headers received during the connection upgrade.
-  * `state` - The current state of the module.
-
-  ## Example
-
-      def handle_preconnect(headers, state) do
-        {:ok, [{"key", "value"} | headers], state}
-      end
-
-  """
-  @callback handle_preconnect(headers, state()) :: {:ok, headers, state()}
-            when headers: Mint.Types.headers()
-
-  @doc """
   Callback invoked when a WebSocket connection is successfully established.
 
   ## Parameters
@@ -336,9 +318,6 @@ defmodule Fresh do
       end
 
       @doc false
-      def handle_preconnect(headers, state), do: {:ok, headers, state}
-
-      @doc false
       def handle_connect(_status, _headers, state), do: {:ok, state}
 
       @doc false
@@ -365,7 +344,6 @@ defmodule Fresh do
 
       defoverridable child_spec: 1,
                      start_link: 1,
-                     handle_preconnect: 2,
                      handle_connect: 3,
                      handle_control: 2,
                      handle_in: 2,
@@ -478,7 +456,52 @@ defmodule Fresh do
     :gen_statem.call(pid, :available)
   end
 
-  def wait(pid) do
-    :gen_statem.call(pid, :wait)
+  @doc """
+  Checks if the connection is established.
+
+  ## Parameters
+
+  * `pid` - The reference to the WebSocket connection process.
+
+  ## Returns
+
+  A `t:boolean/0` representing the state of the connection.
+
+  ## Example
+
+      iex> Fresh.established?(:ws_conn)
+      true
+
+  """
+  @doc since: "0.4.5"
+  def established?(pid) do
+    :gen_statem.call(pid, :established)
+  end
+
+  @doc """
+  Disconnect and connect to another URL. May generate errors
+  that your implementation module can handle.
+
+  ## Parameters
+
+  * `pid` - The reference to the WebSocket connection process.
+  * `url` - The new URL.
+  * `state` - The state of the module for the new connection, or nil to
+    leave it unchanged.
+
+  ## Returns
+
+  `:ok`
+
+  ## Example
+
+      iex> Fresh.new_url(:ws_conn, "wss://another.example.com/socket", %{})
+      :ok
+
+  """
+  @doc since: "0.4.5"
+  def new_url(pid, url, state) do
+    Kernel.send(pid, {:new_url, url, state})
+    :ok
   end
 end
